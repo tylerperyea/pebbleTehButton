@@ -11,6 +11,7 @@ var Vector2 = require('vector2');
 var Vibe = require('ui/vibe');
 var cur={"payload":{"seconds_left":-1,"now_str":"0000000000"}, "last":0};
 var skip=0;
+var now="";
 var last=[];
 //{"payload":{"seconds_left":0,"now_str":"0000000000"}, "last":0};
 
@@ -127,30 +128,18 @@ main.on('click', 'down', function(e) {
   setInterval(function(){
     reload(wind);
   },5000);
+  reload(wind);
 });
 
 function reload(wind){
-    ajax({url: pollURL+"/" + skip, type: 'json'},
+  var sk=skip;
+    ajax({url: pollURL+"/" + sk, type: 'json'},
         function(json) {
-          //if(json.length>=1){
-          //  skip=snow;
-          //}
+          if(sk==0){
+            now=json[0].now_str;
+          }
           drawHistory(wind,json);
-          //resultsCard.body(JSON.stringify(json));
-          /*
-          if(cur.payload.now_str.localeCompare(json.payload.now_str)<=0){
-            if(cur.payload.seconds_left<json.payload.seconds_left){
-                //Vibe.vibrate('short');
-              if(cur.payload.seconds_left>=0){
-                last.push(cur.payload.seconds_left-1);
-              }else if(cur.payload.seconds_left<=30){
-                //Vibe.vibrate('long');
-                last.push(cur.payload.seconds_left-1);
-              }
-            }
-            cur=json;
-            cur["last"]=(new Date())-1;
-          }*/
+          
         },
         function(error) {
           console.log('Ajax failed: ' + error);
@@ -172,12 +161,12 @@ function drawHistory(wind, history){
     var tw=144-20;
     var wpt=tw/60;  
     var hit=th/history.length;
-    var tstamp = "unknown time";
+    var tstamp = null;
     for(var i in history){
       var h=history[i];
-      //if(i===0){
+      if(tstamp==null){
         tstamp=h.now_str;
-      //}
+      }
       var obj ={ position: new Vector2(20, i*(hit)+1),
                      size: new Vector2((60-h.seconds_left)*wpt,hit-1) };
       var tobj ={ position: new Vector2(1, i*(hit)-hit/2+2),
@@ -202,7 +191,7 @@ function drawHistory(wind, history){
     }
     var tlab = texts[history.length];
     var tpos={ position: new Vector2(0, 144-hit),
-              size: new Vector2(tw,hit) backgroundColor:white};
+              size: new Vector2(144,hit),textAlign:"center"};
     if(tlab===undefined){
       tlab=new UI.Text(tpos);
       tlab.font("gothic-14-bold");
@@ -210,7 +199,7 @@ function drawHistory(wind, history){
     }else{
       tlab.animate(tpos);
     }
-    tlab.text(tstamp);
+    tlab.text(moment(getDateTS(tstamp)).fromNow());
     if(rects.length<=0){
       for(var i=0;i<60;i+=10){
         var obj ={ position: new Vector2(20+(60-i)*wpt, 0),
@@ -222,4 +211,10 @@ function drawHistory(wind, history){
   
   //wind.show();
   
+}
+
+function getDateTS(str){
+  var dd=str.split("-");
+  dd[1]--;
+  return Date.UTC(dd[0]-0,dd[1]-0,dd[2]-0,dd[3]-0,dd[4]-0,dd[5]-0);
 }

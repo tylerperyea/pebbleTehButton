@@ -10,10 +10,11 @@ var UI = require('ui');
 var Vector2 = require('vector2');
 var skip = 0;
 var lastHistory = null;
-
-
-
+var setStyle="history";
+var style = "history";
+var lasttick=null;
 function reload(wind) {
+    if(setStyle=="history"){
     var sk = skip;
     ajax({
             url: pollURL + "/" + sk,
@@ -21,21 +22,117 @@ function reload(wind) {
         },
         function(json) {
             lastHistory=json;
+           if(setStyle=="history"){
             drawHistory(wind, json);
+           }
         },
         function(error) {
             console.log('Ajax failed: ' + error);
         }
     );
+    }
 }
 
-function redraw(wind){
-  if(lastHistory!=null){
-    drawHistory(wind,lastHistory);
+function redrawTimer(wind){
+  if(setStyle=="timer"){
+    ajax({
+              url: URL,
+              type: 'json'
+          },
+          function(json) {
+              if(setStyle=="timer"){
+                lasttick=json;
+                drawTimer(wind, json);
+                
+              }
+          },
+          function(error) {
+            if(lasttick!=null){
+              drawTimer(wind,lasttick);
+            }
+              console.log('Ajax failed: ' + error);
+          }
+      );
   }
 }
+function clearWindow(wind){
+  var tpos = {
+        position: new Vector2(-100, -100),
+        size: new Vector2(1, 1)
+    };
+  
+
+  wind.each(function(element) {
+      element.animate(tpos);
+    });
+}
+function drawTimer(wind,json){
+    if(style=="history"){
+      clearWindow(wind);
+      style="timer";
+    }
+    var rects = [];
+    var texts = [];
+    wind.each(function(element) {
+        if (element.text === undefined) {
+            rects.push(element);
+        } else {
+            texts.push(element);
+        }
+    });
+    var tlab = texts[0];
+   var timelab = texts[1];
+     
+   var tpos = {
+        position: new Vector2(0, (json.payload.seconds_left*120)/60),
+        size: new Vector2(144, 40),
+        textAlign: "center"
+    };
+  
+   var tposStatus = {
+        position: new Vector2(0, 0),
+        size: new Vector2(144, 30),
+        textAlign: "center"
+    };
+  
+    if (tlab === undefined) {
+        tlab = new UI.Text(tpos);
+        tlab.font("gothic-28-bold");
+        wind.add(tlab);
+    } else {
+        tlab.animate(tpos);
+    }
+    tlab.text(json.payload.seconds_left);  
+  
+    if (timelab === undefined) {
+        timelab = new UI.Text(tposStatus);
+        timelab.font("gothic-24-bold");
+        timelab.add(tlab);
+    } else {
+        timelab.animate(tposStatus);
+    }
+    timelab.text(moment(getDateTS(json.payload.now_str)).fromNow());
+    //timelab.text(json.payload.seconds_left);  
+  var obj = {
+        position: new Vector2(0, (json.payload.seconds_left*120)/60+20),
+        size: new Vector2(144, 144)
+    };
+   var trect = rects[0];
+  if(trect===undefined){
+    trect = new UI.Rect(obj);
+            wind.add(trect);
+  }else{
+    trect.animate(obj);
+  }
+  
+}
+
 
 function drawHistory(wind, history) {
+    if(style!="history"){
+      clearWindow(wind);
+    }
+    style="history";
     var rects = [];
     var texts = [];
     wind.each(function(element) {
@@ -53,7 +150,7 @@ function drawHistory(wind, history) {
     var tstamp = null;
     for (var i in history) {
         var h = history[i];
-        if (tstamp == null) {
+        if (tstamp === null) {
             tstamp = h.now_str;
         }
         var obj = {
@@ -96,16 +193,20 @@ function drawHistory(wind, history) {
         tlab.animate(tpos);
     }
     tlab.text(moment(getDateTS(tstamp)).fromNow());
-    if (rects.length <= 0) {
-        for (var i = 0; i < 60; i += 10) {
+        for (var i = 0; i < 6; i ++) {
             var obj = {
-                position: new Vector2(20 + (60 - i) * wpt, 0),
+                position: new Vector2(20 + (60 - i*10) * wpt, 0),
                 size: new Vector2(1, th)
             };
-            var rect = new UI.Rect(obj);
-            wind.add(rect);
+            var rect = rects[history.length+i];
+            if(rect===undefined){
+              rect = new UI.Rect(obj);
+              wind.add(rect);
+            }else{
+              rect.animate(obj);
+            }
         }
-    }
+    
 
     //wind.show();
 
@@ -120,13 +221,18 @@ function getDateTS(str) {
 var wind = new UI.Window();
 wind.show();
 wind.on('click', 'down', function(e) {
-    skip += 10;
+    if(setStyle=="timer"){
+      setStyle="history";
+    }else{
+      skip += 10;  
+    }
     reload(wind);
 });
 wind.on('click', 'up', function(e) {
     skip -= 10;
     if (skip < 0) {
         skip = 0;
+        setStyle="timer";
     }
     reload(wind);
 });
@@ -139,6 +245,6 @@ setInterval(function() {
     reload(wind);
 }, 5000);
 setInterval(function() {
-    redraw(wind);
+    redrawTimer(wind);
 }, 1000);
 reload(wind);

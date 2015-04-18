@@ -3,9 +3,13 @@
  *
  * Simple ajaxing tool for keeping track of the button
  */
+var Vibe = require('ui/vibe');
+var Light = require('ui/light');
+
 var ajax = require('ajax');
 var URL = 'http://peryea.duckdns.org:8080/';
-var pollURL = URL + 'history/10';
+var pollURL = URL + 'full/10';
+var fullURL = URL + 'full/2';
 var UI = require('ui');
 var Vector2 = require('vector2');
 var skip = 0;
@@ -13,6 +17,9 @@ var lastHistory = null;
 var setStyle="history";
 var style = "history";
 var lasttick=null;
+var lastFull=null;
+var best=null;
+
 function reload(wind) {
     if(setStyle=="history"){
     var sk = skip;
@@ -21,12 +28,20 @@ function reload(wind) {
             type: 'json'
         },
         function(json) {
-            lastHistory=json;
+           if(lastFull!==null && json.best.seconds_left < lastFull.best.seconds_left){
+              Vibe.vibrate('long');
+              Light.trigger();
+           }
+           lastFull=json;
+           lastHistory=json.history;
            if(setStyle=="history"){
-            drawHistory(wind, json);
+            drawHistory(wind, lastHistory);
            }
         },
         function(error) {
+            if(lastHistory!=null){
+              drawHistory(wind, lastHistory);
+            }
             console.log('Ajax failed: ' + error);
         }
     );
@@ -36,10 +51,15 @@ function reload(wind) {
 function redrawTimer(wind){
   if(setStyle=="timer"){
     ajax({
-              url: URL,
+              url: fullURL,
               type: 'json'
           },
           function(json) {
+            if(lastFull!==null && json.best.seconds_left < lastFull.best.seconds_left){
+              Vibe.vibrate('long');
+              Light.trigger();
+           }
+           lastFull=json;
               if(setStyle=="timer"){
                 lasttick=json;
                 drawTimer(wind, json);
@@ -47,7 +67,7 @@ function redrawTimer(wind){
               }
           },
           function(error) {
-            if(lasttick!=null){
+            if(lasttick!==null){
               drawTimer(wind,lasttick);
             }
               console.log('Ajax failed: ' + error);
@@ -66,7 +86,9 @@ function clearWindow(wind){
       element.animate(tpos);
     });
 }
-function drawTimer(wind,json){
+function drawTimer(wind,jsonF){
+    var json=jsonF.current;
+    var best=jsonF.best;
     if(style=="history"){
       clearWindow(wind);
       style="timer";
@@ -80,53 +102,98 @@ function drawTimer(wind,json){
             texts.push(element);
         }
     });
-    var tlab = texts[0];
-   var timelab = texts[1];
-     
-   var tpos = {
+  
+    var txtCount=json.payload.seconds_left+"";
+    var tpos = {
         position: new Vector2(0, (json.payload.seconds_left*120)/60),
-        size: new Vector2(144, 40),
-        textAlign: "center"
+        size: new Vector2(144, 80),
+        textAlign: "center",
+        font: "gothic-24-bold",
+        text: txtCount
+    };
+    var tposBack = {
+      position: new Vector2(144/2-20, (json.payload.seconds_left*120)/60),
+        size: new Vector2(40, 40),
+              backgroundColor:"black"
     };
   
-   var tposStatus = {
+    var txtTime=moment(getDateTS(json.payload.now_str)).fromNow();
+    var tposStatus = {
         position: new Vector2(0, 0),
         size: new Vector2(144, 30),
-        textAlign: "center"
+        textAlign: "center",
+        text:txtTime,
+        font: "gothic-18-bold"
     };
   
-    if (tlab === undefined) {
-        tlab = new UI.Text(tpos);
-        tlab.font("gothic-28-bold");
-        wind.add(tlab);
-    } else {
-        tlab.animate(tpos);
-    }
-    tlab.text(json.payload.seconds_left);  
+    
+   
   
-    if (timelab === undefined) {
-        timelab = new UI.Text(tposStatus);
-        timelab.font("gothic-24-bold");
-        timelab.add(tlab);
-    } else {
-        timelab.animate(tposStatus);
-    }
-    timelab.text(moment(getDateTS(json.payload.now_str)).fromNow());
-    //timelab.text(json.payload.seconds_left);  
-  var obj = {
-        position: new Vector2(0, (json.payload.seconds_left*120)/60+20),
-        size: new Vector2(144, 144)
-    };
-   var trect = rects[0];
-  if(trect===undefined){
-    trect = new UI.Rect(obj);
-            wind.add(trect);
-  }else{
-    trect.animate(obj);
+  for(var i=0;i<6;i++){
+      makeOrAnimateRect(wind,rects[i],{
+              position: getVerticalPos(i*10),
+              size: new Vector2(144, 1)
+          });
   }
+  makeOrAnimateRect(wind,rects[6],{
+              position: getVerticalPos(best.seconds_left),
+              size: new Vector2(144, 2)
+  });
+  makeOrAnimateRect(wind,rects[7],{
+              position: getVerticalPosTxt(best.seconds_left),
+              size: new Vector2(144/4, 20),
+              backgroundColor:"black"
+  });
+  makeOrAnimateRect(wind,rects[8],tposBack);
+    makeOrAnimateRect(wind,rects[9],{
+          position: getVerticalPos(json.payload.seconds_left),
+          size: new Vector2(144, 144)
+      });
+   makeOrAnimate(wind,texts[0],tpos);
+   makeOrAnimate(wind,texts[1],tposStatus);
+    //timelab.text(json.payload.seconds_left);  
+   makeOrAnimate(wind,texts[2],{
+        position: getVerticalPosTxt(best.seconds_left),
+        size: new Vector2(144/4, 30),
+        textAlign: "center",
+        text: "*"+best.seconds_left+"*",
+        font: "gothic-18-bold"
+    });
   
 }
-
+function getVerticalPos(t){
+  return new Vector2(0, (t*120)/60+30);
+}
+function getVerticalPosTxt(t){
+  return new Vector2(144/8, (t*120)/60+17);
+}
+function makeOrAnimate(wind, timelab, tpos){
+  if (timelab === undefined) {
+        timelab = new UI.Text(tpos);
+        wind.add(timelab);
+    } else {
+        timelab.animate(tpos);
+    }
+    if(tpos.font!=null){
+      timelab.font(tpos.font);
+    }
+    if(tpos.txt!=null){
+      timelab.text(tpos.text);
+    }
+    return timelab;
+}
+function makeOrAnimateRect(wind, timelab, tpos){
+    if (timelab === undefined) {
+        timelab = new UI.Rect(tpos);
+        wind.add(timelab);
+    } else {
+        timelab.animate(tpos);
+    }
+    if(tpos.backgroundColor!=null){
+       timelab.backgroundColor(tpos.backgroundColor);
+    }
+    return timelab;
+}
 
 function drawHistory(wind, history) {
     if(style!="history"){
@@ -148,6 +215,7 @@ function drawHistory(wind, history) {
     var wpt = tw / 60;
     var hit = th / history.length;
     var tstamp = null;
+    var tomaketxt=[];
     for (var i in history) {
         var h = history[i];
         if (tstamp === null) {
@@ -155,29 +223,33 @@ function drawHistory(wind, history) {
         }
         var obj = {
             position: new Vector2(20, i * (hit) + 1),
-            size: new Vector2((60 - h.seconds_left) * wpt, hit - 1)
+            size: new Vector2((60 - h.seconds_left) * wpt, hit - 1),
+                 backgroundColor:"white"
         };
+        var txt = "00" + h.seconds_left + "";
+        txt=txt.substring(txt.length - 2, txt.length);  
         var tobj = {
             position: new Vector2(1, i * (hit) - hit / 2 + 2),
-            size: new Vector2(20, hit - 1)
+            size: new Vector2(20, hit - 1),
+            font:"gothic-18-bold",
+            text:txt
         };
         var rect = rects[i];
         var lab = texts[i];
+        tomaketxt.push({"lab":texts[i],"pos":tobj});
+        
+      
         if (rect === undefined) {
             rect = new UI.Rect(obj);
             wind.add(rect);
         } else {
             rect.animate(obj);
         }
-        if (lab === undefined) {
-            lab = new UI.Text(tobj);
-            lab.font("gothic-18-bold");
-            wind.add(lab);
-        } else {
-            lab.animate(tobj);
-        }
-        var txt = "00" + h.seconds_left + "";
-        lab.text(txt.substring(txt.length - 2, txt.length));
+    }
+    for(var i in tomaketxt){
+      var lab=tomaketxt[i].lab;
+      var pos=tomaketxt[i].pos;
+      makeOrAnimate(wind,lab,pos);
     }
     var tlab = texts[history.length];
     var tpos = {
